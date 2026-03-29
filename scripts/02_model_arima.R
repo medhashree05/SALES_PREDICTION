@@ -1,103 +1,196 @@
-#required libraries for the forcasting of the product
+###############################################################
+# SALES FORECASTING USING ARIMA + FOURIER TERMS
+# Description:
+# This script performs:
+# 1. Data loading
+# 2. Time series transformation
+# 3. ARIMA-based forecasting (with Fourier terms)
+# 4. Product-level prediction generation
+# 5. Output file creation
+###############################################################
+
+###############################
+# REQUIRED LIBRARIES
+###############################
+# Libraries required for forecasting and data manipulation
 library("forecast")
 library("Matrix")
 library(TTR)
 library(dplyr)
-# FIX: removed library(tcltk) - only needed for the commented-out tk_choose.files line
-# FIX: moved all library() calls here; duplicate library(forecast) inside the loop has been removed
 
-#select the input file
-####inputfile = tk_choose.files(caption = "Choose the input data file")
+# NOTE:
+# library(tcltk) removed as it is not required for this implementation
+
+
+###############################################################
+# INPUT AND OUTPUT FILE CONFIGURATION
+###############################################################
+
+# Input file containing historical product sales data
+# (Can be replaced with file picker if needed)
+#### inputfile = tk_choose.files(caption = "Choose the input data file")
 inputfile = "product_distribution_training_set.txt"
-#predicted output will be redirected to this file
+
+# Output file where predictions will be stored
 product_predicted_data_output_file = "output-cgajare1-B00668719.txt"
-#reading the data from the input file and redirecting it to sale_data object
-sale_data = read.delim(inputfile,header=FALSE)
-#creating a data matrix object by reading the first row and 2:119 columns of sale_data object
-sale_data_matrix=data.matrix(colSums(sale_data[,c(2:119)]))
-#converting the sale_data_matrix to time series object
+
+
+###############################################################
+# STEP 1: LOAD DATA
+###############################################################
+
+# Read dataset into R
+sale_data = read.delim(inputfile, header = FALSE)
+
+# Compute total daily sales (column-wise sum)
+sale_data_matrix = data.matrix(colSums(sale_data[, c(2:119)]))
+
+# Convert to time series format
 sale_data_matrix_ts = ts(ts(sale_data_matrix[c(1:118),1]), frequency = 1)
-#it returns the matrices containing the terms from the fourier series. It is suitable for arima series
-data_xreg = fourier(ts(sale_data_matrix_ts, frequency=365.25), K=4, h=NULL)
-#It returns the arima model object
-auto_arima_data = auto.arima(sale_data_matrix_ts,  xreg=data_xreg, seasonal=FALSE)
-#Forcasting the data of 28 days
-forcast_arima_data_sum_products = forecast.Arima(auto_arima_data, xreg=data_xreg, h=28)
 
-#mean value of forcast_arima_data_sum_products data
-forcast_mean=forcast_arima_data_sum_products$mean
-#Replacing the negative values with zero
-forcast_mean[forcast_mean<0] = 0
-forcated_mean_data = c(0,round(forcast_mean))
-#creating a matrix of size row=1 and columns = 119
-dailysale_predict_matrix=matrix(forcated_mean_data,nrow=1,ncol=119)
-#creating adata matrix
-product_matrix=data.matrix(sale_data,rownames.force = NA)
-#transposing the matrix data
-product_matrix=t(product_matrix)
 
-#creating a matrix of size(100,119) to store the product predictions
-product_dailysale_predict_matrix=matrix(0,nrow=100,ncol=119)
+###############################################################
+# STEP 2: GLOBAL FORECAST (ALL PRODUCTS COMBINED)
+###############################################################
 
-#prediction is done for all the 100 products each day sale
-#i values will represent the products ID's.
+# Generate Fourier terms for seasonality
+data_xreg = fourier(ts(sale_data_matrix_ts, frequency = 365.25), K = 4, h = NULL)
+
+# Fit ARIMA model with external regressors
+auto_arima_data = auto.arima(sale_data_matrix_ts, xreg = data_xreg, seasonal = FALSE)
+
+# Forecast next 28 days
+forcast_arima_data_sum_products = forecast.Arima(auto_arima_data, xreg = data_xreg, h = 28)
+
+# Extract forecasted mean values
+forcast_mean = forcast_arima_data_sum_products$mean
+
+# Replace negative predictions with zero
+forcast_mean[forcast_mean < 0] = 0
+
+# Prepare aggregated prediction row
+forcated_mean_data = c(0, round(forcast_mean))
+
+# Store in matrix format
+dailysale_predict_matrix = matrix(forcated_mean_data, nrow = 1, ncol = 119)
+
+
+###############################################################
+# STEP 3: PREPARE PRODUCT-WISE DATA
+###############################################################
+
+# Convert dataset to matrix
+product_matrix = data.matrix(sale_data, rownames.force = NA)
+
+# Transpose matrix for easier product-wise processing
+product_matrix = t(product_matrix)
+
+# Initialize matrix to store predictions for all products
+product_dailysale_predict_matrix = matrix(0, nrow = 100, ncol = 119)
+
+
+###############################################################
+# STEP 4: PRODUCT-WISE FORECASTING USING ARIMA
+###############################################################
+
+# Loop through each product (1 to 100)
 i <- 1
-# FIX: was while(i<=1) — only processed the first product; changed to 100
-while(i<=100){
+
+while(i <= 100){
+  
+  # Display current product index
   cat("  ")
   cat(i)
-  sale_data_matrix_ts = ts(data.frame(product_matrix[c(2:119),i]), frequency=1)
-  data_xreg = fourier(ts(sale_data_matrix_ts, frequency=365.25/4), K=4, h=NULL)
-  auto_arima_data = auto.arima(sale_data_matrix_ts,  xreg=data_xreg, seasonal=FALSE)
-  forcast_arima_data_rest = forecast.Arima(auto_arima_data, xreg=data_xreg,h=28)
-  data_xreg_365 = fourier(ts(sale_data_matrix_ts, frequency=365.25),K=4, h=NULL)
-  auto_arima_data_365 = auto.arima(sale_data_matrix_ts,  xreg=data_xreg_365, seasonal=FALSE)
-  forcast_arima_data_rest_365 = forecast.Arima(auto_arima_data_365, xreg=data_xreg_365, h=28)
-  forcast_mean=forcast_arima_data_rest$mean
   
-  #plotting the forcasted data of i product on graph
+  # Convert product data into time series
+  sale_data_matrix_ts = ts(data.frame(product_matrix[c(2:119), i]), frequency = 1)
+  
+  # Generate Fourier terms for short-term seasonality
+  data_xreg = fourier(ts(sale_data_matrix_ts, frequency = 365.25/4), K = 4, h = NULL)
+  
+  # Fit ARIMA model
+  auto_arima_data = auto.arima(sale_data_matrix_ts, xreg = data_xreg, seasonal = FALSE)
+  
+  # Forecast next 28 days
+  forcast_arima_data_rest = forecast.Arima(auto_arima_data, xreg = data_xreg, h = 28)
+  
+  # Generate Fourier terms for annual seasonality
+  data_xreg_365 = fourier(ts(sale_data_matrix_ts, frequency = 365.25), K = 4, h = NULL)
+  
+  # Fit second ARIMA model
+  auto_arima_data_365 = auto.arima(sale_data_matrix_ts, xreg = data_xreg_365, seasonal = FALSE)
+  
+  # Forecast using second model
+  forcast_arima_data_rest_365 = forecast.Arima(auto_arima_data_365, xreg = data_xreg_365, h = 28)
+  
+  # Extract forecast values
+  forcast_mean = forcast_arima_data_rest$mean
   
   
-  #replacing the negatinve values with mean
-  forcast_mean[forcast_mean<0]=forcast_arima_data_rest_365$mean
-  #If still, the values is negative then replacing the negatinve values with upper values
-  forcast_mean[forcast_mean<0]=forcast_arima_data_rest_365$upper[,1]
-  #If still, the values is negative then replacing the negatinve values with zero  
-  forcast_mean[forcast_mean<0]=0
-  #creating a matrix of the predicted data
+  ###########################################################
+  # POST-PROCESSING OF PREDICTIONS
+  ###########################################################
+  
+  # Replace negative values using alternative model predictions
+  forcast_mean[forcast_mean < 0] = forcast_arima_data_rest_365$mean
+  
+  # Replace remaining negatives using upper confidence bound
+  forcast_mean[forcast_mean < 0] = forcast_arima_data_rest_365$upper[,1]
+  
+  # Final fallback: replace negatives with zero
+  forcast_mean[forcast_mean < 0] = 0
   
   
-  # FIX: removed dead debug block (stl/HoltWinters plots/prints) that
-  # generated unwanted GUI windows and console output on every iteration.
-  # mygraph$mean is replaced by forcast_mean which is already computed above.
+  ###########################################################
+  # STORE PRODUCT PREDICTIONS
+  ###########################################################
+  
+  # Combine product ID and predicted values into matrix
   product_dailysale_predict_matrix[i,] =
-    matrix(c(product_matrix[1,i], as.numeric(round(forcast_mean))), 1, 119)
+    matrix(c(product_matrix[1, i], as.numeric(round(forcast_mean))), 1, 119)
   
-  i <- i+1
-  
-  
-  
+  # Move to next product
+  i <- i + 1
 }
-#combining the both the matrices i.e. dailysale_predict_matrix and product_dailysale_predict_matrix
-final_matrix = rbind(dailysale_predict_matrix,product_dailysale_predict_matrix)
-#picking only the 28 days data from the final matrix
-product_predicted_output=final_matrix[,c(1:29)]
-#if the output file exist, then deleting that file to store the freash data
+
+
+###############################################################
+# STEP 5: COMBINE FINAL RESULTS
+###############################################################
+
+# Combine aggregated and product-wise predictions
+final_matrix = rbind(dailysale_predict_matrix, product_dailysale_predict_matrix)
+
+# Extract only required 28-day predictions
+product_predicted_output = final_matrix[, c(1:29)]
+
+
+###############################################################
+# STEP 6: SAVE OUTPUT FILE
+###############################################################
+
+# Remove existing output file (if present)
 if(file.exists(product_predicted_data_output_file)){
   file.remove(product_predicted_data_output_file) 
 }
-#wrtting the data in the text file.
+
+# Write final output to file
+write.table(product_predicted_output,
+            file = product_predicted_data_output_file,
+            quote = FALSE,
+            sep = "\t",
+            row.names = FALSE,
+            col.names = FALSE)
 
 
+###############################################################
+# UTILITY FUNCTION (OPTIONAL)
+###############################################################
 
-
-write.table(product_predicted_output,file=product_predicted_data_output_file,quote = FALSE,sep = "\t",row.names = FALSE,col.names = FALSE)
-
-
-
+# Function to test execution delay (not used in main pipeline)
 testit <- function(x)
 {
   p1 <- proc.time()
   Sys.sleep(x)
-  proc.time() - p1 # The cpu usage should be negligible
+  proc.time() - p1
 }

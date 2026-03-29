@@ -1,121 +1,171 @@
+###############################################################
+# SALES TIME SERIES FORECASTING USING STL + ETS
+# Description:
+# This script contains functions for:
+# 1. Data loading and preprocessing
+# 2. Forecasting using STL + ETS
+# 3. Generating final output matrix
+###############################################################
+
+###############################
+# REQUIRED LIBRARIES
+###############################
 require(forecast)
 
+
+###############################################################
+# FUNCTION 1: DATA LOADING AND PREPROCESSING
+###############################################################
 getdata <- function(x){
   
-  data<-as.matrix(read.table(x,header=FALSE))
+  # Read dataset and convert to matrix
+  data <- as.matrix(read.table(x, header = FALSE))
   
-  # Transpose the original data for the convinience
-  trans<-t(data)
+  # Transpose the data for easier column-wise processing
+  trans <- t(data)
   
-  # Create a new matrix to also hold the overall sales
-  train <- matrix(data=NA, nrow=nrow(trans)-1, ncol=ncol(trans)+1)
+  # Initialize training matrix
+  # Rows = time steps, Columns = products + total sales column
+  train <- matrix(data = NA, nrow = nrow(trans) - 1, ncol = ncol(trans) + 1)
   
-  # Sum up the sales for each day in first row
+  # Compute total sales per day (first column)
   for(i in c(1:nrow(trans)-1)){
-    train[,1][i] <- sum(data[,i+1])
+    train[,1][i] <- sum(data[, i + 1])
   }
   
-  # Simply copy the data
+  # Copy individual product sales into matrix
   for(i in c(1:ncol(trans))){
-    train[,i+1] <- trans[,i][2:nrow(trans)]
+    train[, i + 1] <- trans[, i][2:nrow(trans)]
   }
+  
   return(train)
 }
 
+
+###############################################################
+# FUNCTION 2: LOAD PRODUCT IDS
+###############################################################
 get_key_id <- function(x){
   
-  data<-as.matrix(read.table(x,header=FALSE))
+  # Read product ID file
+  data <- as.matrix(read.table(x, header = FALSE))
+  
   return(data)
 }
 
-forecast.stl<-function(x, n.ahead=28) {
-  # Computes data-trend prediction using STL with ETS method
-  #
-  # args:
-  # x - Contains list of sales for each 118 days for a key product
-  #
-  # returns - List of sales for next 28 days
+
+###############################################################
+# FUNCTION 3: FORECASTING USING STL + ETS
+###############################################################
+forecast.stl <- function(x, n.ahead = 28) {
   
-  # Data preprocessing to remove the 0s. So that we can perform 
-  # logarithmic operation on the data to reduce it for greater 
-  # accuracy.
+  ###########################################################
+  # STEP 1: INITIAL TIME SERIES CREATION
+  ###########################################################
   
+  # Convert data into time series (weekly frequency)
+  myts <- ts(x, frequency = 7)
   
-  myts = ts(x,frequency=7)
-  fit <- stl(myts, s.window="period")
+  # Perform STL decomposition
+  fit <- stl(myts, s.window = "period")
+  
+  # Plot decomposition components
   plot(fit)
+  
+  # Visualize seasonal patterns
   monthplot(myts)
   library(forecast)
-  seasonplot(myts) 
-  print(myts,calendar = TRUE)
+  seasonplot(myts)
   
-  fit <- HoltWinters(myts, alpha=0.992,beta=0, gamma=0)
+  # Print time series values
+  print(myts, calendar = TRUE)
+  
+  
+  ###########################################################
+  # STEP 2: HOLT-WINTERS FORECASTING (BASE MODEL)
+  ###########################################################
+  
+  # Apply Holt-Winters smoothing
+  fit <- HoltWinters(myts, alpha = 0.992, beta = 0, gamma = 0)
+  
+  # Generate forecast for 28 days
   mygraph <- forecast(fit, 28)
-  plot(forecast(fit, 28)) 
   
-  print(round(forecast(fit, 28)$mean),calendar = FALSE)
-  ##testit(4)
-  #testit(2)
+  # Plot forecast results
+  plot(forecast(fit, 28))
   
-  
-  
+  # Print forecasted values
+  print(round(forecast(fit, 28)$mean), calendar = FALSE)
   
   
+  ###########################################################
+  # STEP 3: DATA PREPROCESSING FOR STL + ETS
+  ###########################################################
   
-  
+  # Add 1 to avoid log(0) issues
   for(i in c(1:length(x)))
-    x[i]=x[i]+1
+    x[i] <- x[i] + 1
   
-  # Creating a time series object of the preprocessed data by 
-  # performing log on the data.
-  # Frequency is set to 30 as the it is a daily data for couple of months.
-  # Therefore frequency = 30/1 = 30
   
-  myTs<-ts(log(x), start=1, frequency=30)
-  # plot(myTs)
+  ###########################################################
+  # STEP 4: LOG TRANSFORMATION
+  ###########################################################
   
-  # Performing Seasonal Decomposition of Time Series by Loess (STL) and Error Trend Seasonal (ETS) method
-  # stlf() combines stlm and forecast.stlm. It takes a ts argument, 
-  # applies an STL decomposition, models the seasonally adjusted data, 
-  # reseasonalizes, and returns the forecasts.
-  fc<-stlf(myTs, 
-           h=n.ahead, 
-           s.window=2, 
-           method='ets',
-           ic='bic',
-           opt.crit='mae')
+  # Convert to log scale time series
+  myTs <- ts(log(x), start = 1, frequency = 30)
   
-  # As we had performed logarithmic operation to get the original forecast data we have to perform
-  # exponentail operation.
+  
+  ###########################################################
+  # STEP 5: STL + ETS FORECASTING (MAIN MODEL)
+  ###########################################################
+  
+  # Apply STL decomposition + ETS forecasting
+  fc <- stlf(myTs, 
+             h = n.ahead, 
+             s.window = 2, 
+             method = 'ets',
+             ic = 'bic',
+             opt.crit = 'mae')
+  
+  # Convert back from log scale
   pred <- exp(fc$mean)
   
   
-  # Post Processing of data making sure that negative values are set to 0.
-  # Subtracting the value of constant e added while data preprocessing.
-  # Rounding up the value to the closesd whole number.
+  ###########################################################
+  # STEP 6: POST-PROCESSING OF RESULTS
+  ###########################################################
+  
+  # Adjust values back (remove +1, round, remove negatives)
   for(i in c(1:n.ahead)){
-    pred[i]=pred[i]-1
-    pred[i]=round(pred[i]/1)*1
-    if(pred[i]<0)
-      pred[i]=0
+    pred[i] <- pred[i] - 1
+    pred[i] <- round(pred[i] / 1) * 1
+    if(pred[i] < 0)
+      pred[i] <- 0
   }
+  
   return(pred)
 }
 
+
+###############################################################
+# FUNCTION 4: GENERATE FINAL OUTPUT MATRIX
+###############################################################
 get_final <- function(result, key_id, nrow, ncol){
   
-  output<-matrix(data=0, nrow=nrow, ncol=ncol)
+  # Initialize output matrix
+  output <- matrix(data = 0, nrow = nrow, ncol = ncol)
   
-  # Inserting key product ids in the first column of output matrix
+  # Insert product IDs in first column
   for(i in c(1:100)){
-    output[,1][i+1]<-key_id[,1][i]
+    output[,1][i + 1] <- key_id[,1][i]
   }
   
-  # Inserting predicted data into the output matrix
-  tresult<-t(result)
+  # Insert forecasted values
+  tresult <- t(result)
   for(i in c(1:101)){
     for(j in c(1:28))
-      output[,j+1][i]<-tresult[,j][i]
+      output[, j + 1][i] <- tresult[, j][i]
   }
+  
   return(output)
 }
