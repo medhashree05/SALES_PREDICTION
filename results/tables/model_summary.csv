@@ -1,0 +1,5 @@
+"Metric","Value"
+"Model","STL + ETS"
+"Forecast_Horizon","28 days"
+"Seasonality","Weekly"
+"Transformation","Log Transformation"

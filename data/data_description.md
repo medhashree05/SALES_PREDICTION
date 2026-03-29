@@ -108,7 +108,7 @@ The dataset includes daily sales records across multiple products and spans seve
 2. Run the main script:
 
    ```r
-   source("scripts/04_run_pipeline.R")
+   source("scripts/03_run_pipeline.R")
    ```
 3. The model will:
 
