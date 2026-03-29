@@ -112,6 +112,7 @@ The model successfully generated forecasts for all products. Each product has 28
 ### Figure 1: STL Decomposition
 
 Shows trend, seasonal, and residual components.
+results/figures/forecast_plot_01.png
 
 ### Figure 2: Month Plot
 
