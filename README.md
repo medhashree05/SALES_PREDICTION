@@ -7,7 +7,7 @@
 * **N Medhashree** – 2023BCS0042
 * **Sejal Satheesh** – 2023BCS0048
 * **Amal Byju Dev** – 2023BCS0156
-* **Ayesha Linta** – 2023BCS0186
+* **Ayesha Linta** – 2023BCS0183
 
 ---
 
